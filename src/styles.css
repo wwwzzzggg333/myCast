@@ -1,0 +1,263 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: #e8e8e8;
+  background: #1a1a1c;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  grid-template-rows: 1fr auto;
+  height: 100%;
+}
+
+.sidebar {
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 16px;
+  background: #252528;
+  border-right: 1px solid #333;
+}
+
+.app-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.panel-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.channel-picker .channel-options {
+  display: flex;
+  gap: 8px;
+}
+
+.channel-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #2e2e32;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.channel-option.active {
+  border-color: #5a9fd4;
+  background: #333842;
+}
+
+.channel-option input {
+  accent-color: #5a9fd4;
+}
+
+.device-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.device-panel-header .panel-label {
+  margin-bottom: 0;
+}
+
+.device-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.device-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #2e2e32;
+}
+
+.device-item.active {
+  border-color: #5a9fd4;
+  background: #333842;
+}
+
+.device-name {
+  font-weight: 500;
+}
+
+.device-udid {
+  font-size: 11px;
+  color: #888;
+  font-family: ui-monospace, monospace;
+}
+
+.field input[type='text'] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #2e2e32;
+  color: #e8e8e8;
+  font-size: 14px;
+}
+
+.field input[type='text']:focus {
+  outline: none;
+  border-color: #5a9fd4;
+}
+
+.hint,
+.usb-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #aaa;
+  line-height: 1.5;
+}
+
+.usb-hint {
+  padding: 8px 10px;
+  background: #2a2f36;
+  border-radius: 6px;
+  border-left: 3px solid #5a9fd4;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.btn-primary,
+.btn-secondary {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.btn-primary {
+  background: #4a8fc7;
+  color: #fff;
+  font-weight: 500;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #5a9fd4;
+}
+
+.btn-secondary {
+  background: #3a3a3e;
+  color: #e8e8e8;
+  border: 1px solid #555;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #45454a;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.workspace {
+  display: flex;
+  min-height: 0;
+  background: #111;
+}
+
+.video-pane {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.video-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  object-fit: contain;
+}
+
+.video-pane-hint,
+.video-pane-empty {
+  padding: 32px;
+  text-align: center;
+  color: #888;
+}
+
+.video-pane-hint p,
+.video-pane-empty p {
+  max-width: 420px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.status-bar {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #252528;
+  border-top: 1px solid #333;
+  font-size: 13px;
+}
+
+.status-phase {
+  color: #bbb;
+  white-space: nowrap;
+}
+
+.status-error {
+  color: #f08080;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
