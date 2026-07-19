@@ -45,7 +45,11 @@ export class SessionManager {
   }
 
   async start(channel: Channel, options: StartOptions): Promise<void> {
-    if (this.snapshot.phase === 'streaming' || this.snapshot.phase === 'connecting') {
+    if (
+      this.snapshot.phase === 'streaming' ||
+      this.snapshot.phase === 'connecting' ||
+      this.snapshot.phase === 'stopping'
+    ) {
       throw new Error('An active session already exists')
     }
     const backend = this.backends[channel]
@@ -98,23 +102,33 @@ export class SessionManager {
     }
   }
 
-  notifyDisconnected(): void {
-    void this.active?.stop()
-    this.active = null
-    this.set({
-      phase: 'error',
-      errorMessage: toUserMessage(new CastError('DISCONNECTED')),
-      viewerUrl: null,
-    })
+  async notifyDisconnected(): Promise<void> {
+    try {
+      await this.active?.stop()
+    } finally {
+      this.active = null
+      this.set({
+        phase: 'error',
+        errorMessage: toUserMessage(new CastError('DISCONNECTED')),
+        viewerUrl: null,
+        channel: null,
+        device: null,
+      })
+    }
   }
 
-  notifyBackendCrashed(): void {
-    void this.active?.stop()
-    this.active = null
-    this.set({
-      phase: 'error',
-      errorMessage: toUserMessage(new CastError('BACKEND_CRASHED')),
-      viewerUrl: null,
-    })
+  async notifyBackendCrashed(): Promise<void> {
+    try {
+      await this.active?.stop()
+    } finally {
+      this.active = null
+      this.set({
+        phase: 'error',
+        errorMessage: toUserMessage(new CastError('BACKEND_CRASHED')),
+        viewerUrl: null,
+        channel: null,
+        device: null,
+      })
+    }
   }
 }

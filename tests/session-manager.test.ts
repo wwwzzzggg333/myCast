@@ -38,6 +38,24 @@ describe('SessionManager', () => {
     await expect(sm.start('airplay', { airplayName: 'myCast' })).rejects.toThrow(/active session/i)
   })
 
+  it('rejects starting a second session while stopping', async () => {
+    let resolveStop!: () => void
+    const stopDeferred = new Promise<void>((resolve) => {
+      resolveStop = resolve
+    })
+    const usb = makeBackend('usb')
+    usb.stop = vi.fn(async () => {
+      await stopDeferred
+    })
+    const sm = new SessionManager({ usb, airplay: makeBackend('airplay') })
+    await sm.start('usb', { airplayName: 'myCast', deviceUdid: 'u1' })
+    const stopPromise = sm.stop()
+    expect(sm.getSnapshot().phase).toBe('stopping')
+    await expect(sm.start('airplay', { airplayName: 'myCast' })).rejects.toThrow(/active session/i)
+    resolveStop()
+    await stopPromise
+  })
+
   it('stop returns to idle and calls backend.stop', async () => {
     const usb = makeBackend('usb')
     const sm = new SessionManager({ usb, airplay: makeBackend('airplay') })
@@ -58,23 +76,33 @@ describe('SessionManager', () => {
   })
 
   it('notifyDisconnected moves streaming → error with DISCONNECTED copy', async () => {
+    const usb = makeBackend('usb')
     const sm = new SessionManager({
-      usb: makeBackend('usb'),
+      usb,
       airplay: makeBackend('airplay'),
     })
     await sm.start('usb', { airplayName: 'myCast', deviceUdid: 'u1' })
-    sm.notifyDisconnected()
+    await sm.notifyDisconnected()
     expect(sm.getSnapshot().phase).toBe('error')
     expect(sm.getSnapshot().errorMessage).toContain('断开')
+    expect(sm.getSnapshot().channel).toBeNull()
+    expect(sm.getSnapshot().device).toBeNull()
+    expect(sm.getSnapshot().viewerUrl).toBeNull()
+    expect(usb.stop).toHaveBeenCalled()
   })
 
   it('notifyBackendCrashed maps to BACKEND_CRASHED copy', async () => {
+    const airplay = makeBackend('airplay')
     const sm = new SessionManager({
       usb: makeBackend('usb'),
-      airplay: makeBackend('airplay'),
+      airplay,
     })
     await sm.start('airplay', { airplayName: 'myCast' })
-    sm.notifyBackendCrashed()
+    await sm.notifyBackendCrashed()
     expect(sm.getSnapshot().errorMessage).toMatch(/异常|重试/)
+    expect(sm.getSnapshot().channel).toBeNull()
+    expect(sm.getSnapshot().device).toBeNull()
+    expect(sm.getSnapshot().viewerUrl).toBeNull()
+    expect(airplay.stop).toHaveBeenCalled()
   })
 })
