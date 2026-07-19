@@ -23,7 +23,7 @@ export function App() {
     void api()
       .listUsbDevices()
       .then((devices) => setUsbDeviceCount(devices.length))
-  }, [phase])
+  }, [phase, channel])
 
   const handleStart = useCallback(async () => {
     setBusy(true)
@@ -70,6 +70,7 @@ export function App() {
           onSelectUdid={setSelectedUdid}
           airplayName={airplayName}
           onAirplayNameChange={setAirplayName}
+          onUsbDeviceCountChange={setUsbDeviceCount}
           disabled={controlsDisabled}
         />
         {showUsbHint && <p className="usb-hint">推荐使用 USB（通常更稳）</p>}
@@ -96,7 +97,12 @@ export function App() {
         </div>
       </aside>
       <main className="workspace">
-        <VideoPane viewerUrl={session?.viewerUrl} channel={session?.channel ?? channel} phase={phase} />
+        <VideoPane
+          viewerUrl={session?.viewerUrl}
+          channel={session?.channel ?? channel}
+          phase={phase}
+          airplayName={session?.airplayName ?? airplayName}
+        />
       </main>
       <StatusBar phase={phase} errorMessage={session?.errorMessage} />
     </div>

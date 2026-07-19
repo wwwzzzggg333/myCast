@@ -4,9 +4,10 @@ interface VideoPaneProps {
   viewerUrl: string | null | undefined
   channel: Channel | null | undefined
   phase: SessionPhase | undefined
+  airplayName: string
 }
 
-export function VideoPane({ viewerUrl, channel, phase }: VideoPaneProps) {
+export function VideoPane({ viewerUrl, channel, phase, airplayName }: VideoPaneProps) {
   if (viewerUrl) {
     return (
       <div className="video-pane">
@@ -18,7 +19,7 @@ export function VideoPane({ viewerUrl, channel, phase }: VideoPaneProps) {
   if (phase === 'streaming' && channel === 'airplay') {
     return (
       <div className="video-pane video-pane-hint">
-        <p>请在 iPhone 控制中心选择屏幕镜像 → myCast；画面由接收窗口显示。</p>
+        <p>请在 iPhone 控制中心选择屏幕镜像 → {airplayName}；画面由接收窗口显示。</p>
       </div>
     )
   }

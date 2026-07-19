@@ -8,6 +8,7 @@ interface DevicePanelProps {
   onSelectUdid: (udid: string | null) => void
   airplayName: string
   onAirplayNameChange: (name: string) => void
+  onUsbDeviceCountChange?: (count: number) => void
   disabled?: boolean
 }
 
@@ -17,6 +18,7 @@ export function DevicePanel({
   onSelectUdid,
   airplayName,
   onAirplayNameChange,
+  onUsbDeviceCountChange,
   disabled,
 }: DevicePanelProps) {
   const [devices, setDevices] = useState<DeviceInfo[]>([])
@@ -27,6 +29,7 @@ export function DevicePanel({
     try {
       const list = await api().listUsbDevices()
       setDevices(list)
+      onUsbDeviceCountChange?.(list.length)
       if (list.length === 1) {
         onSelectUdid(list[0].udid)
       } else if (selectedUdid && !list.some((d) => d.udid === selectedUdid)) {
@@ -35,7 +38,7 @@ export function DevicePanel({
     } finally {
       setLoading(false)
     }
-  }, [onSelectUdid, selectedUdid])
+  }, [onSelectUdid, onUsbDeviceCountChange, selectedUdid])
 
   useEffect(() => {
     if (channel === 'usb') {
