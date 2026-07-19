@@ -12,8 +12,9 @@ import type { CastBackend, StartOptions, StartResult } from './types'
 
 const execFileAsync = promisify(execFile)
 
+// Do NOT match bare "pymobiledevice3" — traceback paths contain that package name.
 const MISSING_DEPS_RE =
-  /ModuleNotFoundError|ImportError|No module named|pymobiledevice3|requirements\.txt/i
+  /ModuleNotFoundError|ImportError|No module named ['"]?pymobiledevice3|缺少 Python 依赖|pip install -r sidecar\/requirements\.txt/i
 
 const MISSING_DEPS_MSG =
   '缺少 Python 依赖。请执行：pip install -r sidecar/requirements.txt'
@@ -28,6 +29,7 @@ export function mapUsbExitCode(code: number | null): CastError {
   if (code === 2) return new CastError('DEVICE_NOT_TRUSTED')
   if (code === 3) return new CastError('NO_DEVICE')
   if (code === 4) return new CastError('DRIVER_MISSING')
+  if (code === 5) return new CastError('DEVELOPER_MODE_REQUIRED')
   return new CastError('BACKEND_CRASHED', `exit ${code}`)
 }
 

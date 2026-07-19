@@ -15,7 +15,16 @@ declare global {
 }
 
 export function api(): MycastApi {
+  if (!window.mycast) {
+    throw new Error(
+      'preload 未注入 window.mycast。请确认 Electron sandbox=false 且 preload 已加载（DevTools Console 可查）。',
+    )
+  }
   return window.mycast
+}
+
+export function hasMycastApi(): boolean {
+  return typeof window.mycast?.getSession === 'function'
 }
 
 /** Strip Electron IPC invoke wrapper so UI can show the Chinese CastError message. */

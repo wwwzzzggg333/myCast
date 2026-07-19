@@ -2,6 +2,8 @@
   "name": "mycast",
   "version": "0.1.0",
   "private": true,
+  "description": "Mirror iPhone screen to Windows over USB or AirPlay",
+  "license": "MIT",
   "type": "module",
   "main": "out/main/main.js",
   "scripts": {

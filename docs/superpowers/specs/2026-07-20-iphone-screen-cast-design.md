@@ -1,7 +1,7 @@
 # myCast：iPhone 投屏到 Windows 设计规格
 
 **日期：** 2026-07-20  
-**状态：** Implemented pending device QA（规格已 Accepted；代码实现完成，真机 QA 待勾选）  
+**状态：** Implemented（USB 真机投屏已验证；AirPlay 依赖本机 UxPlay，按需配置）  
 
 **范围：** v1 只做画面实时显示；声音、录制、反向控制为后续增强
 

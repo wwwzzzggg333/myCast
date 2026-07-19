@@ -39,6 +39,10 @@ describe('usb sidecar protocol', () => {
     expect(mapUsbExitCode(4).code).toBe('DRIVER_MISSING')
   })
 
+  it('maps exit code 5 to DEVELOPER_MODE_REQUIRED', () => {
+    expect(mapUsbExitCode(5).code).toBe('DEVELOPER_MODE_REQUIRED')
+  })
+
   it('maps missing-module stderr to UNKNOWN with pip hint', () => {
     const err = mapUsbSidecarFailure(
       4,
@@ -46,6 +50,14 @@ describe('usb sidecar protocol', () => {
     )
     expect(err.code).toBe('UNKNOWN')
     expect(err.message).toMatch(/pip install|requirements\.txt/)
+  })
+
+  it('does not treat pymobiledevice3 traceback paths as missing deps', () => {
+    const err = mapUsbSidecarFailure(
+      5,
+      'File ".../site-packages/pymobiledevice3/services/dvt/instruments/screenshot.py"\nInvalidService',
+    )
+    expect(err.code).toBe('DEVELOPER_MODE_REQUIRED')
   })
 })
 

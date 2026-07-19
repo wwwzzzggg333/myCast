@@ -12,6 +12,11 @@ describe('toUserMessage', () => {
     expect(toUserMessage(err)).toMatch(/iTunes|Apple/)
   })
 
+  it('maps DEVELOPER_MODE_REQUIRED to developer mode hint', () => {
+    const err = new CastError('DEVELOPER_MODE_REQUIRED')
+    expect(toUserMessage(err)).toMatch(/开发者模式/)
+  })
+
   it('maps AIRPLAY_BINARY_MISSING to install hint', () => {
     const err = new CastError('AIRPLAY_BINARY_MISSING', 'vendor/uxplay/uxplay.exe')
     expect(toUserMessage(err)).toMatch(/UxPlay|vendor\/README/)

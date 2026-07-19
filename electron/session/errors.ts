@@ -1,6 +1,7 @@
 export type CastErrorCode =
   | 'DEVICE_NOT_TRUSTED'
   | 'DRIVER_MISSING'
+  | 'DEVELOPER_MODE_REQUIRED'
   | 'AIRPLAY_BINARY_MISSING'
   | 'AIRPLAY_PORT_IN_USE'
   | 'FIREWALL_BLOCKED'
@@ -22,6 +23,8 @@ const MESSAGES: Record<CastErrorCode, string> = {
   DEVICE_NOT_TRUSTED: '请在 iPhone 上点「信任此电脑」，然后重试。',
   DRIVER_MISSING:
     '未检测到 Apple 设备支持组件。请安装 Microsoft Store 版 iTunes（或 Apple Mobile Device Support）后重试。',
+  DEVELOPER_MODE_REQUIRED:
+    'USB 截屏服务不可用。请确认已开启「开发者模式」并重启；若已开启，请在电脑执行：sidecar\\.venv\\Scripts\\python -m pymobiledevice3 mounter auto-mount，然后重试。也可改用 AirPlay。',
   AIRPLAY_BINARY_MISSING:
     '未找到 UxPlay。请按 vendor/README.md 安装并设置 MYCAST_UXPLAY。',
   AIRPLAY_PORT_IN_USE: 'AirPlay 端口或名称冲突。请关闭占用程序，或在设置里更换接收名称后重试。',

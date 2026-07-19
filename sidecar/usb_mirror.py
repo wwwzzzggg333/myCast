@@ -18,6 +18,8 @@ from typing import Any, Optional
 EXIT_NOT_TRUSTED = 2
 EXIT_NO_DEVICE = 3
 EXIT_DRIVER = 4
+# iOS 17+ USB capture needs Developer Mode (+ often DDI mount / tunnel).
+EXIT_DEVELOPER_MODE = 5
 
 # v1 capture: screenshot loop → JPEG (~8 FPS). Higher-FPS DVT path deferred.
 TARGET_FPS = 8.0
@@ -161,6 +163,9 @@ class FrameBuffer:
         self._lock = threading.Lock()
         self._jpeg = b""
         self._stop = threading.Event()
+        self.first_frame = threading.Event()
+        self.fatal: Optional[BaseException] = None
+        self.ready_published = False
 
     @property
     def stop_event(self) -> threading.Event:
@@ -169,10 +174,15 @@ class FrameBuffer:
     def set_jpeg(self, data: bytes) -> None:
         with self._lock:
             self._jpeg = data
+        self.first_frame.set()
 
     def get_jpeg(self) -> bytes:
         with self._lock:
             return self._jpeg
+
+    def set_fatal(self, exc: BaseException) -> None:
+        self.fatal = exc
+        self.first_frame.set()
 
 
 def _png_to_jpeg(png_bytes: bytes, quality: int = 70) -> bytes:
@@ -197,18 +207,63 @@ def _placeholder_jpeg(message: str) -> bytes:
     return buf.getvalue()
 
 
-async def _capture_loop(udid: Optional[str], frames: FrameBuffer) -> None:
+async def _developer_mode_enabled(lockdown: Any) -> Optional[bool]:
+    """Return True/False when status is known; None if the query API is unavailable."""
+    try:
+        if hasattr(lockdown, "get_developer_mode_status"):
+            return bool(await lockdown.get_developer_mode_status())
+    except Exception:
+        return None
+    return None
+
+
+async def _ensure_developer_mode(udid: str) -> None:
     from pymobiledevice3.lockdown import create_using_usbmux
-    from pymobiledevice3.services.screenshot import ScreenshotService
+
+    async with await create_using_usbmux(serial=udid) as lockdown:
+        mode = await _developer_mode_enabled(lockdown)
+        if mode is False:
+            print(
+                "Developer Mode is OFF. Enable it on the iPhone "
+                "(Settings → Privacy & Security → Developer Mode), reboot, then retry.",
+                file=sys.stderr,
+            )
+            raise SidecarExit(EXIT_DEVELOPER_MODE)
+
+
+async def _try_auto_mount_ddi(udid: str) -> None:
+    """Best-effort Developer Disk Image mount (required for DVT on modern iOS)."""
+    try:
+        from pymobiledevice3.lockdown import create_using_usbmux
+        from pymobiledevice3.services.mobile_image_mounter import (
+            auto_mount as auto_mount_image,
+        )
+
+        async with await create_using_usbmux(serial=udid) as lockdown:
+            await auto_mount_image(lockdown)
+            print("DeveloperDiskImage mount OK", file=sys.stderr)
+    except Exception as exc:
+        # Already mounted / network TSS issues — capture probe will surface real failures.
+        print(f"DDI auto-mount skipped/failed: {exc}", file=sys.stderr)
+
+
+async def _capture_loop(udid: Optional[str], frames: FrameBuffer) -> None:
+    """iOS 17+ path: DVT instruments screenshot over UserspaceRsdTunnel."""
+    from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel
+    from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
+    from pymobiledevice3.services.dvt.instruments.screenshot import Screenshot
+
+    if not udid:
+        raise SidecarExit(EXIT_NO_DEVICE)
 
     interval = 1.0 / TARGET_FPS
     consecutive_gone = 0
-    async with await create_using_usbmux(serial=udid) as lockdown:
-        async with ScreenshotService(lockdown) as screenshotr:
+    async with UserspaceRsdTunnel(serial=udid) as rsd:
+        async with DvtProvider(rsd) as dvt, Screenshot(dvt) as shot:
             while not frames.stop_event.is_set():
                 t0 = time.monotonic()
                 try:
-                    raw = await screenshotr.take_screenshot()
+                    raw = await shot.get_screenshot()
                     frames.set_jpeg(_png_to_jpeg(raw))
                     consecutive_gone = 0
                 except Exception as exc:
@@ -218,6 +273,16 @@ async def _capture_loop(udid: Optional[str], frames: FrameBuffer) -> None:
                             raise SidecarExit(EXIT_NO_DEVICE) from exc
                     else:
                         consecutive_gone = 0
+                    # Before first real frame, treat capture setup failures as fatal.
+                    if not frames.first_frame.is_set():
+                        print(
+                            "DVT screenshot unavailable. Ensure Developer Mode is ON and "
+                            "DeveloperDiskImage is mounted "
+                            "(python -m pymobiledevice3 mounter auto-mount). "
+                            f"Detail: {exc}",
+                            file=sys.stderr,
+                        )
+                        raise SidecarExit(EXIT_DEVELOPER_MODE) from exc
                     frames.set_jpeg(_placeholder_jpeg(f"capture error: {exc}"))
                     await asyncio.sleep(1.0)
                     continue
@@ -230,13 +295,21 @@ def _start_capture_thread(udid: Optional[str], frames: FrameBuffer) -> threading
         try:
             asyncio.run(_capture_loop(udid, frames))
         except SidecarExit as exc:
+            frames.set_fatal(exc)
             code = int(exc.code) if exc.code is not None else 1
+            # If READY not yet printed, let main thread exit with this code.
+            if not frames.ready_published:
+                return
             os._exit(code)
         except Exception as exc:
+            frames.set_fatal(exc)
             if _map_connect_error(exc) == EXIT_NO_DEVICE:
-                os._exit(EXIT_NO_DEVICE)
-            frames.set_jpeg(_placeholder_jpeg(f"capture stopped: {exc}"))
+                if frames.ready_published:
+                    os._exit(EXIT_NO_DEVICE)
+                return
             traceback.print_exc(file=sys.stderr)
+            if frames.ready_published:
+                frames.set_jpeg(_placeholder_jpeg(f"capture stopped: {exc}"))
 
     t = threading.Thread(target=runner, name="usb-capture", daemon=True)
     t.start()
@@ -359,9 +432,28 @@ def cmd_serve(port: int, udid: Optional[str]) -> None:
     except Exception as exc:
         raise SidecarExit(_map_connect_error(exc)) from exc
 
+    try:
+        asyncio.run(_ensure_developer_mode(serial))
+        asyncio.run(_try_auto_mount_ddi(serial))
+    except SidecarExit:
+        raise
+    except Exception as exc:
+        raise SidecarExit(_map_connect_error(exc)) from exc
+
     frames = FrameBuffer()
-    frames.set_jpeg(_placeholder_jpeg("connecting…"))
+    # Do not set_jpeg before first real frame — first_frame gates READY.
     _start_capture_thread(serial, frames)
+
+    # Wait until first real frame or fatal capture error (tunnel/DVT setup).
+    if not frames.first_frame.wait(timeout=60.0):
+        frames.stop_event.set()
+        print("Timed out waiting for first USB frame.", file=sys.stderr)
+        raise SidecarExit(EXIT_DEVELOPER_MODE)
+    if frames.fatal is not None:
+        frames.stop_event.set()
+        if isinstance(frames.fatal, SidecarExit):
+            raise frames.fatal
+        raise SidecarExit(EXIT_DEVELOPER_MODE) from frames.fatal
 
     handler = _make_handler(frames)
     try:
@@ -370,6 +462,7 @@ def cmd_serve(port: int, udid: Optional[str]) -> None:
         print(f"failed to bind 127.0.0.1:{port}: {exc}", file=sys.stderr)
         raise SidecarExit(1) from exc
 
+    frames.ready_published = True
     url = f"http://127.0.0.1:{port}/"
     print(f"READY {url}", flush=True)
     try:

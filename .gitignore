@@ -3,5 +3,13 @@ node_modules/
 out/
 dist/
 sidecar/.venv/
+sidecar/__pycache__/
+*.pyc
 *.log
 .DS_Store
+shot*.png
+out-*.png
+*.local
+
+# Agent / SDD scratch (keep specs & plans under docs/)
+.superpowers/sdd/

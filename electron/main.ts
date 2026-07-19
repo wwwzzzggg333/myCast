@@ -16,6 +16,13 @@ function resolvePreloadPath(): string {
   return `${base}.js`
 }
 
+function resolvePythonPath(): string {
+  if (process.env.MYCAST_PYTHON) return process.env.MYCAST_PYTHON
+  const venvPy = path.join(app.getAppPath(), 'sidecar', '.venv', 'Scripts', 'python.exe')
+  if (fs.existsSync(venvPy)) return venvPy
+  return 'python'
+}
+
 /** Default: real backends. Set `MYCAST_USE_MOCK=1` for UI-only. */
 function createBackends(hooks: {
   onCrash: () => void
@@ -27,9 +34,11 @@ function createBackends(hooks: {
       airplay: createMockBackend('airplay'),
     }
   }
+  const pythonPath = resolvePythonPath()
+  console.log('[myCast] python:', pythonPath)
   return {
     usb: createUsbBackend({
-      pythonPath: process.env.MYCAST_PYTHON ?? 'python',
+      pythonPath,
       scriptPath:
         process.env.MYCAST_USB_SCRIPT ??
         path.join(app.getAppPath(), 'sidecar', 'usb_mirror.py'),
@@ -81,13 +90,20 @@ function syncUsbVideo(snapshot: SessionSnapshot) {
 }
 
 app.whenReady().then(() => {
+  const preloadPath = resolvePreloadPath()
+  console.log('[myCast] preload:', preloadPath, 'exists=', fs.existsSync(preloadPath))
+  console.log('[myCast] ELECTRON_RENDERER_URL=', process.env.ELECTRON_RENDERER_URL ?? '(none)')
+
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 720,
+    backgroundColor: '#1a1a1c',
     webPreferences: {
-      preload: resolvePreloadPath(),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
+      // ESM (.mjs) preload requires unsandboxed preload per Electron / electron-vite docs
+      sandbox: false,
     },
   })
 
@@ -116,10 +132,21 @@ app.whenReady().then(() => {
     return sm.getSnapshot()
   })
 
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.error('[myCast] did-fail-load', { code, desc, url })
+  })
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    console.error('[myCast] render-process-gone', details)
+  })
+
   mainWindow.on('closed', () => {
     usbVideo.destroy()
     mainWindow = null
   })
+
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
+  }
 
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)

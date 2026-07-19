@@ -6,8 +6,27 @@ export function useSession() {
   const [session, setSession] = useState<SessionSnapshot | null>(null)
 
   useEffect(() => {
-    void api().getSession().then(setSession)
-    return api().onSessionChanged(setSession)
+    let cancelled = false
+    let unsubscribe = () => {}
+    try {
+      void api()
+        .getSession()
+        .then((s) => {
+          if (!cancelled) setSession(s)
+        })
+        .catch((err) => {
+          console.error('[myCast] getSession failed', err)
+        })
+      unsubscribe = api().onSessionChanged((s) => {
+        if (!cancelled) setSession(s)
+      })
+    } catch (err) {
+      console.error('[myCast] session bridge unavailable', err)
+    }
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [])
 
   return session
