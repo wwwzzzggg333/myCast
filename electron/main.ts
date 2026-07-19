@@ -112,7 +112,17 @@ app.whenReady().then(() => {
   }
 })
 
-app.on('before-quit', () => {
-  usbVideo.destroy()
-  void sm.stop()
+let quitting = false
+app.on('before-quit', (e) => {
+  if (quitting) return
+  e.preventDefault()
+  quitting = true
+  void (async () => {
+    try {
+      usbVideo.destroy()
+      await sm.stop()
+    } finally {
+      app.exit(0)
+    }
+  })()
 })

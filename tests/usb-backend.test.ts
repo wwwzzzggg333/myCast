@@ -143,4 +143,32 @@ describe('UsbBackend spawn lifecycle', () => {
     spawned!.emit('exit', 1, null)
     expect(onCrash).toHaveBeenCalledTimes(1)
   })
+
+  it('exit code 3 after READY calls onDisconnect', async () => {
+    const onDisconnect = vi.fn()
+    const onCrash = vi.fn()
+    let spawned: (ChildProcess & EventEmitter) | null = null
+    const spawn: SpawnFn = () => {
+      spawned = fakeChild()
+      queueMicrotask(() => {
+        spawned!.stdout!.emit('data', Buffer.from('READY http://127.0.0.1:17890/\n'))
+      })
+      return spawned
+    }
+
+    const backend = createUsbBackend({
+      pythonPath: 'python',
+      scriptPath: 'usb_mirror.py',
+      onCrash,
+      onDisconnect,
+      spawn,
+      allocatePort: async () => 17890,
+      killTree: async () => {},
+    })
+
+    await backend.start({ airplayName: 'myCast' })
+    spawned!.emit('exit', 3, null)
+    expect(onDisconnect).toHaveBeenCalledTimes(1)
+    expect(onCrash).not.toHaveBeenCalled()
+  })
 })
