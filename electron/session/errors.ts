@@ -22,7 +22,7 @@ const MESSAGES: Record<CastErrorCode, string> = {
   DRIVER_MISSING:
     '未检测到 Apple 设备支持组件。请安装 Microsoft Store 版 iTunes（或 Apple Mobile Device Support）后重试。',
   AIRPLAY_PORT_IN_USE: 'AirPlay 端口或名称冲突。请关闭占用程序，或在设置里更换接收名称后重试。',
-  FIREWALL_BLOCKED: '可能被防火墙拦截。请允许 myCast 通过专用/专用网络，并放行相关组播发现。',
+  FIREWALL_BLOCKED: '可能被防火墙拦截。请允许 myCast 通过专用/公用网络，并放行相关组播发现。',
   BACKEND_CRASHED: '投屏异常退出。请点击重试；若反复失败，请重新插拔 USB 或重启 App。',
   DISCONNECTED: '连接已断开。',
   NO_DEVICE: '未检测到 iPhone。请确认 USB 已连接且手机已解锁。',
