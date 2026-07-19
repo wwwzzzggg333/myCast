@@ -36,4 +36,12 @@ describe('toUserMessage', () => {
     const err = new CastError('DISCONNECTED', 'device gone')
     expect(toUserMessage(err)).toContain('断开')
   })
+
+  it('prefers UNKNOWN detail for missing Python deps', () => {
+    const err = new CastError(
+      'UNKNOWN',
+      '缺少 Python 依赖。请执行：pip install -r sidecar/requirements.txt',
+    )
+    expect(toUserMessage(err)).toMatch(/pip install|requirements\.txt/)
+  })
 })

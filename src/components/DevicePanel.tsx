@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../lib/ipc'
+import { api, formatIpcInvokeError } from '../lib/ipc'
 import type { Channel, DeviceInfo } from '../../electron/session/types'
 
 interface DevicePanelProps {
@@ -23,18 +23,24 @@ export function DevicePanel({
 }: DevicePanelProps) {
   const [devices, setDevices] = useState<DeviceInfo[]>([])
   const [loading, setLoading] = useState(false)
+  const [listError, setListError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
       const list = await api().listUsbDevices()
       setDevices(list)
+      setListError(null)
       onUsbDeviceCountChange?.(list.length)
       if (list.length === 1) {
         onSelectUdid(list[0].udid)
       } else if (selectedUdid && !list.some((d) => d.udid === selectedUdid)) {
         onSelectUdid(null)
       }
+    } catch (err) {
+      setDevices([])
+      onUsbDeviceCountChange?.(0)
+      setListError(formatIpcInvokeError(err) || '刷新设备列表失败，请重试。')
     } finally {
       setLoading(false)
     }
@@ -72,7 +78,11 @@ export function DevicePanel({
           {loading ? '刷新中…' : '刷新'}
         </button>
       </div>
-      {devices.length === 0 ? (
+      {listError ? (
+        <p className="hint list-error" role="alert">
+          {listError}
+        </p>
+      ) : devices.length === 0 ? (
         <p className="hint">未检测到设备，请连接 iPhone 后刷新</p>
       ) : (
         <ul className="device-list">

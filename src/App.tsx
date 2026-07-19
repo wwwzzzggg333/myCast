@@ -31,6 +31,10 @@ export function App() {
     void api()
       .listUsbDevices()
       .then((devices) => setUsbDeviceCount(devices.length))
+      .catch(() => {
+        // DevicePanel surfaces the Chinese error when on USB; avoid unhandled rejection.
+        setUsbDeviceCount(0)
+      })
   }, [phase, channel])
 
   const handleStart = useCallback(async () => {

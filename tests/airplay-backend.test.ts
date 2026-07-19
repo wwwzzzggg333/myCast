@@ -12,6 +12,8 @@ function fakeChild(): ChildProcess & EventEmitter {
   child.stdout = stdout as ChildProcess['stdout']
   child.stderr = stderr as ChildProcess['stderr']
   child.pid = 5151
+  child.exitCode = null
+  child.signalCode = null
   child.kill = vi.fn(() => true) as ChildProcess['kill']
   return child
 }
@@ -175,7 +177,40 @@ describe('AirplayBackend', () => {
     const startPromise = backend.start({ airplayName: 'myCast' })
     await vi.advanceTimersByTimeAsync(10)
     await startPromise
+    spawned!.exitCode = 1
     spawned!.emit('exit', 1, null)
     expect(onCrash).toHaveBeenCalledTimes(1)
+  })
+
+  it('start rejects when process already exited after settle (missed exit event)', async () => {
+    const onCrash = vi.fn()
+    const killTree = vi.fn(async () => {})
+    const spawn: SpawnFn = () => {
+      const child = fakeChild()
+      // Exit during settle window after waitForStartup drops its listener:
+      // set exitCode without relying on the startup exit handler.
+      queueMicrotask(() => {
+        child.exitCode = 1
+      })
+      return child
+    }
+
+    const backend = createAirplayBackend({
+      uxplayPath: 'uxplay.exe',
+      onCrash,
+      spawn,
+      killTree,
+      startupSettleMs: 10,
+      binaryExists: () => true,
+    })
+
+    const startPromise = backend.start({ airplayName: 'myCast' })
+    const rejected = expect(startPromise).rejects.toMatchObject({
+      code: 'BACKEND_CRASHED',
+    })
+    await vi.advanceTimersByTimeAsync(10)
+    await rejected
+    expect(onCrash).not.toHaveBeenCalled()
+    expect(killTree).toHaveBeenCalled()
   })
 })

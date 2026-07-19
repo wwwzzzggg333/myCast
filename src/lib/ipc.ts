@@ -17,3 +17,13 @@ declare global {
 export function api(): MycastApi {
   return window.mycast
 }
+
+/** Strip Electron IPC invoke wrapper so UI can show the Chinese CastError message. */
+export function formatIpcInvokeError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? '')
+  const m = raw.match(
+    /Error invoking remote method '[^']+':\s*(?:Error:\s*)?([\s\S]+)$/i,
+  )
+  const msg = (m?.[1] ?? raw).trim()
+  return msg || '操作失败，请重试。'
+}

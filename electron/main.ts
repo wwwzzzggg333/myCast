@@ -5,6 +5,7 @@ import { SessionManager } from './session/session-manager'
 import { createAirplayBackend } from './session/backends/airplay-backend'
 import { createMockBackend } from './session/backends/mock-backend'
 import { createUsbBackend } from './session/backends/usb-backend'
+import { CastError, toUserMessage } from './session/errors'
 import { createUsbVideoView } from './video/usb-video-view'
 import type { CastBackend } from './session/backends/types'
 import type { Channel, SessionSnapshot } from './session/types'
@@ -96,7 +97,16 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('session:get', () => sm.getSnapshot())
-  ipcMain.handle('session:listUsb', () => sm.listUsbDevices())
+  ipcMain.handle('session:listUsb', async () => {
+    try {
+      return await sm.listUsbDevices()
+    } catch (e) {
+      const err = e instanceof CastError ? e : new CastError('UNKNOWN', String(e))
+      const wrapped = new Error(toUserMessage(err)) as Error & { code: string }
+      wrapped.code = err.code
+      throw wrapped
+    }
+  })
   ipcMain.handle('session:start', async (_e, channel: Channel, options) => {
     await sm.start(channel, options)
     return sm.getSnapshot()

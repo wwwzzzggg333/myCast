@@ -30,6 +30,15 @@ class SidecarExit(SystemExit):
     """Exit with a sidecar protocol code."""
 
 
+def _die_missing_dep(exc: BaseException) -> None:
+    """Print a clear install hint and exit with DRIVER/deps code (4)."""
+    print(
+        f"缺少 Python 依赖: {exc}\n请执行: pip install -r sidecar/requirements.txt",
+        file=sys.stderr,
+    )
+    raise SidecarExit(EXIT_DRIVER) from exc
+
+
 def _is_driver_error(exc: BaseException) -> bool:
     msg = str(exc).lower()
     name = type(exc).__name__.lower()
@@ -138,6 +147,8 @@ def cmd_list() -> None:
         devices = asyncio.run(_list_devices())
     except SidecarExit:
         raise
+    except (ImportError, ModuleNotFoundError) as exc:
+        _die_missing_dep(exc)
     except Exception as exc:
         code = _map_connect_error(exc)
         print(f"list failed: {exc}", file=sys.stderr)
@@ -243,18 +254,18 @@ async def _probe_device(udid: Optional[str]) -> str:
     except Exception as exc:
         raise SidecarExit(_map_connect_error(exc)) from exc
 
+    # USB-only: do not fall back to network/Wi-Fi companions for serve.
     usb_devices = [d for d in devices if _connection_type(d) == "usb"]
-    candidates = usb_devices or list(devices)
 
     if udid:
-        match = next((d for d in candidates if d.serial == udid), None)
+        match = next((d for d in usb_devices if d.serial == udid), None)
         if match is None:
             raise SidecarExit(EXIT_NO_DEVICE)
         serial = udid
     else:
-        if not candidates:
+        if not usb_devices:
             raise SidecarExit(EXIT_NO_DEVICE)
-        serial = candidates[0].serial
+        serial = usb_devices[0].serial
 
     try:
         async with await create_using_usbmux(serial=serial) as lockdown:
@@ -343,6 +354,8 @@ def cmd_serve(port: int, udid: Optional[str]) -> None:
         serial = asyncio.run(_probe_device(udid))
     except SidecarExit:
         raise
+    except (ImportError, ModuleNotFoundError) as exc:
+        _die_missing_dep(exc)
     except Exception as exc:
         raise SidecarExit(_map_connect_error(exc)) from exc
 
@@ -389,6 +402,12 @@ def main(argv: Optional[list[str]] = None) -> None:
     except SidecarExit as exc:
         code = int(exc.code) if exc.code is not None else 1
         raise SystemExit(code) from None
+    except (ImportError, ModuleNotFoundError) as exc:
+        print(
+            f"缺少 Python 依赖: {exc}\n请执行: pip install -r sidecar/requirements.txt",
+            file=sys.stderr,
+        )
+        raise SystemExit(EXIT_DRIVER) from None
 
 
 if __name__ == "__main__":

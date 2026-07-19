@@ -153,6 +153,10 @@ body {
   line-height: 1.5;
 }
 
+.list-error {
+  color: #e88;
+}
+
 .usb-hint {
   padding: 8px 10px;
   background: #2a2f36;

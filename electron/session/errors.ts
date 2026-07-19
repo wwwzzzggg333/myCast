@@ -33,5 +33,14 @@ const MESSAGES: Record<CastErrorCode, string> = {
 }
 
 export function toUserMessage(error: CastError): string {
+  // Prefer explicit Chinese/detail on UNKNOWN (e.g. missing Python deps).
+  if (
+    error.code === 'UNKNOWN' &&
+    error.message &&
+    error.message !== 'UNKNOWN' &&
+    error.message.trim().length > 0
+  ) {
+    return error.message
+  }
   return MESSAGES[error.code] ?? MESSAGES.UNKNOWN
 }

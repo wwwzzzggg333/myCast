@@ -12,6 +12,12 @@ import type { CastBackend, StartOptions, StartResult } from './types'
 
 const execFileAsync = promisify(execFile)
 
+const MISSING_DEPS_RE =
+  /ModuleNotFoundError|ImportError|No module named|pymobiledevice3|requirements\.txt/i
+
+const MISSING_DEPS_MSG =
+  '缺少 Python 依赖。请执行：pip install -r sidecar/requirements.txt'
+
 /** Parse sidecar stdout READY line → viewer URL. */
 export function parseReadyLine(line: string): string | null {
   const m = line.trim().match(/^READY\s+(http:\/\/\S+)/i)
@@ -23,6 +29,18 @@ export function mapUsbExitCode(code: number | null): CastError {
   if (code === 3) return new CastError('NO_DEVICE')
   if (code === 4) return new CastError('DRIVER_MISSING')
   return new CastError('BACKEND_CRASHED', `exit ${code}`)
+}
+
+/** Map sidecar exit + stderr (missing deps, driver, etc.) to CastError. */
+export function mapUsbSidecarFailure(code: number | null, stderr = ''): CastError {
+  if (MISSING_DEPS_RE.test(stderr)) {
+    return new CastError('UNKNOWN', MISSING_DEPS_MSG)
+  }
+  return mapUsbExitCode(code)
+}
+
+export function childHasExited(child: ChildProcess): boolean {
+  return child.exitCode != null || child.signalCode != null
 }
 
 export type SpawnFn = (
@@ -96,8 +114,8 @@ class UsbBackend implements CastBackend {
   }
 
   async listDevices(): Promise<DeviceInfo[]> {
-    const { stdout, code } = await this.runToCompletion(['list'])
-    if (code !== 0) throw mapUsbExitCode(code)
+    const { stdout, stderr, code } = await this.runToCompletion(['list'])
+    if (code !== 0) throw mapUsbSidecarFailure(code, stderr)
     const trimmed = stdout.trim()
     if (!trimmed) return []
     let parsed: unknown
@@ -133,10 +151,33 @@ class UsbBackend implements CastBackend {
     })
     this.child = child
 
-    const viewerUrl = await this.waitForReady(child)
-    this.sessionActive = true
-    this.attachExitHandler(child)
-    return { viewerUrl }
+    let stderr = ''
+    const onStderr = (chunk: Buffer | string) => {
+      stderr += chunk.toString()
+    }
+    child.stderr?.on('data', onStderr)
+
+    try {
+      const viewerUrl = await this.waitForReady(child, () => stderr)
+      // Close the window between READY and sessionActive: process may already be dead.
+      if (childHasExited(child)) {
+        throw mapUsbSidecarFailure(child.exitCode, stderr)
+      }
+      this.sessionActive = true
+      this.attachExitHandler(child)
+      if (childHasExited(child)) {
+        // Exit landed between check and listener attach — event may have been missed.
+        this.sessionActive = false
+        if (this.child === child) this.child = null
+        throw mapUsbSidecarFailure(child.exitCode, stderr)
+      }
+      return { viewerUrl }
+    } catch (err) {
+      child.stderr?.off('data', onStderr)
+      if (this.child === child) this.child = null
+      this.sessionActive = false
+      throw err
+    }
   }
 
   async stop(): Promise<void> {
@@ -178,7 +219,7 @@ class UsbBackend implements CastBackend {
     this.stopping = false
   }
 
-  private waitForReady(child: ChildProcess): Promise<string> {
+  private waitForReady(child: ChildProcess, getStderr: () => string): Promise<string> {
     return new Promise((resolve, reject) => {
       let buffer = ''
       let settled = false
@@ -206,7 +247,7 @@ class UsbBackend implements CastBackend {
       }
 
       const onExit = (code: number | null) => {
-        settle(() => reject(mapUsbExitCode(code)))
+        settle(() => reject(mapUsbSidecarFailure(code, getStderr())))
       }
 
       const onError = (err: Error) => {
@@ -236,18 +277,22 @@ class UsbBackend implements CastBackend {
 
   private runToCompletion(
     args: string[],
-  ): Promise<{ stdout: string; code: number | null }> {
+  ): Promise<{ stdout: string; stderr: string; code: number | null }> {
     return new Promise((resolve, reject) => {
       const child = this.spawn(this.opts.pythonPath, [this.opts.scriptPath, ...args], {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       })
       let stdout = ''
+      let stderr = ''
       child.stdout?.on('data', (chunk: Buffer | string) => {
         stdout += chunk.toString()
       })
+      child.stderr?.on('data', (chunk: Buffer | string) => {
+        stderr += chunk.toString()
+      })
       child.on('error', (err) => reject(new CastError('UNKNOWN', err.message)))
-      child.on('close', (code) => resolve({ stdout, code }))
+      child.on('close', (code) => resolve({ stdout, stderr, code }))
     })
   }
 }

@@ -41,7 +41,11 @@ export class SessionManager {
   }
 
   async listUsbDevices() {
-    return this.backends.usb.listDevices()
+    try {
+      return await this.backends.usb.listDevices()
+    } catch (e) {
+      throw e instanceof CastError ? e : new CastError('UNKNOWN', String(e))
+    }
   }
 
   async start(channel: Channel, options: StartOptions): Promise<void> {

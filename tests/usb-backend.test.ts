@@ -4,6 +4,7 @@ import type { ChildProcess } from 'node:child_process'
 import {
   createUsbBackend,
   mapUsbExitCode,
+  mapUsbSidecarFailure,
   parseReadyLine,
   type SpawnFn,
 } from '../electron/session/backends/usb-backend'
@@ -15,6 +16,8 @@ function fakeChild(): ChildProcess & EventEmitter {
   child.stdout = stdout as ChildProcess['stdout']
   child.stderr = stderr as ChildProcess['stderr']
   child.pid = 4242
+  child.exitCode = null
+  child.signalCode = null
   child.kill = vi.fn(() => true) as ChildProcess['kill']
   return child
 }
@@ -34,6 +37,15 @@ describe('usb sidecar protocol', () => {
 
   it('maps exit code 4 to DRIVER_MISSING', () => {
     expect(mapUsbExitCode(4).code).toBe('DRIVER_MISSING')
+  })
+
+  it('maps missing-module stderr to UNKNOWN with pip hint', () => {
+    const err = mapUsbSidecarFailure(
+      4,
+      'ModuleNotFoundError: No module named pymobiledevice3\n请执行: pip install -r sidecar/requirements.txt',
+    )
+    expect(err.code).toBe('UNKNOWN')
+    expect(err.message).toMatch(/pip install|requirements\.txt/)
   })
 })
 
@@ -116,6 +128,62 @@ describe('UsbBackend spawn lifecycle', () => {
     await expect(backend.listDevices()).resolves.toEqual([
       { udid: 'u1', name: 'iPhone', connectionType: 'usb' },
     ])
+  })
+
+  it('listDevices maps missing Python deps via stderr', async () => {
+    const spawn: SpawnFn = () => {
+      const child = fakeChild()
+      queueMicrotask(() => {
+        child.stderr!.emit(
+          'data',
+          Buffer.from('ModuleNotFoundError: No module named pymobiledevice3\n'),
+        )
+        child.emit('close', 4, null)
+      })
+      return child
+    }
+
+    const backend = createUsbBackend({
+      pythonPath: 'python',
+      scriptPath: 'usb_mirror.py',
+      onCrash: () => {},
+      onDisconnect: () => {},
+      spawn,
+    })
+
+    await expect(backend.listDevices()).rejects.toMatchObject({
+      code: 'UNKNOWN',
+      message: expect.stringMatching(/pip install|requirements\.txt/),
+    })
+  })
+
+  it('start rejects when process exits immediately after READY (missed exit event)', async () => {
+    const onCrash = vi.fn()
+    const spawn: SpawnFn = () => {
+      const child = fakeChild()
+      queueMicrotask(() => {
+        child.stdout!.emit('data', Buffer.from('READY http://127.0.0.1:17890/\n'))
+        // Simulate exit after waitForReady removed its listener but before attachExitHandler.
+        child.exitCode = 1
+        child.emit('exit', 1, null)
+      })
+      return child
+    }
+
+    const backend = createUsbBackend({
+      pythonPath: 'python',
+      scriptPath: 'usb_mirror.py',
+      onCrash,
+      onDisconnect: () => {},
+      spawn,
+      allocatePort: async () => 17890,
+      killTree: async () => {},
+    })
+
+    await expect(backend.start({ airplayName: 'myCast' })).rejects.toMatchObject({
+      code: 'BACKEND_CRASHED',
+    })
+    expect(onCrash).not.toHaveBeenCalled()
   })
 
   it('unexpected exit after READY calls onCrash', async () => {
