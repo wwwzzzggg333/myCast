@@ -7,17 +7,25 @@ import { useSession } from './hooks/useSession'
 import { api } from './lib/ipc'
 import type { Channel } from '../electron/session/types'
 
+interface LastStartOptions {
+  channel: Channel
+  deviceUdid?: string
+  airplayName: string
+}
+
 export function App() {
   const session = useSession()
   const [channel, setChannel] = useState<Channel>('usb')
   const [selectedUdid, setSelectedUdid] = useState<string | null>(null)
   const [airplayName, setAirplayName] = useState('myCast')
+  const [lastStart, setLastStart] = useState<LastStartOptions | null>(null)
   const [usbDeviceCount, setUsbDeviceCount] = useState(0)
   const [busy, setBusy] = useState(false)
 
   const phase = session?.phase
+  const isError = phase === 'error'
   const isActive = phase === 'connecting' || phase === 'streaming' || phase === 'stopping'
-  const controlsDisabled = isActive || busy
+  const controlsDisabled = isActive || busy || isError
 
   useEffect(() => {
     void api()
@@ -26,11 +34,17 @@ export function App() {
   }, [phase, channel])
 
   const handleStart = useCallback(async () => {
+    const options: LastStartOptions = {
+      channel,
+      deviceUdid: channel === 'usb' ? (selectedUdid ?? undefined) : undefined,
+      airplayName,
+    }
+    setLastStart(options)
     setBusy(true)
     try {
-      await api().start(channel, {
-        deviceUdid: channel === 'usb' ? (selectedUdid ?? undefined) : undefined,
-        airplayName,
+      await api().start(options.channel, {
+        deviceUdid: options.deviceUdid,
+        airplayName: options.airplayName,
       })
     } catch {
       // error state reflected via session snapshot
@@ -49,11 +63,26 @@ export function App() {
   }, [])
 
   const handleRetry = useCallback(async () => {
-    await handleStart()
-  }, [handleStart])
+    if (!lastStart) return
+    setChannel(lastStart.channel)
+    if (lastStart.deviceUdid !== undefined) {
+      setSelectedUdid(lastStart.deviceUdid)
+    }
+    setAirplayName(lastStart.airplayName)
+    setBusy(true)
+    try {
+      await api().start(lastStart.channel, {
+        deviceUdid: lastStart.deviceUdid,
+        airplayName: lastStart.airplayName,
+      })
+    } catch {
+      // error state reflected via session snapshot
+    } finally {
+      setBusy(false)
+    }
+  }, [lastStart])
 
-  const showUsbHint =
-    phase === 'idle' && usbDeviceCount > 0 && channel !== 'usb'
+  const showUsbHint = phase === 'idle' && usbDeviceCount > 0 && channel !== 'usb'
 
   const canStart =
     !controlsDisabled &&
@@ -75,25 +104,45 @@ export function App() {
         />
         {showUsbHint && <p className="usb-hint">推荐使用 USB（通常更稳）</p>}
         <div className="controls">
-          <button type="button" className="btn-primary" disabled={!canStart} onClick={() => void handleStart()}>
-            开始投屏
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={!isActive || busy}
-            onClick={() => void handleStop()}
-          >
-            停止
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={phase !== 'error' || busy}
-            onClick={() => void handleRetry()}
-          >
-            重试
-          </button>
+          {isError ? (
+            <>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={busy || !lastStart}
+                onClick={() => void handleRetry()}
+              >
+                重试
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={busy}
+                onClick={() => void handleStop()}
+              >
+                断开/复位
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={!canStart}
+                onClick={() => void handleStart()}
+              >
+                开始投屏
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={!isActive || busy}
+                onClick={() => void handleStop()}
+              >
+                停止
+              </button>
+            </>
+          )}
         </div>
       </aside>
       <main className="workspace">

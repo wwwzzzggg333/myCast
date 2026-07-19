@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import io
 import json
+import os
 import sys
 import threading
 import time
@@ -21,6 +22,8 @@ EXIT_DRIVER = 4
 # v1 capture: screenshot loop → JPEG (~8 FPS). Higher-FPS DVT path deferred.
 TARGET_FPS = 8.0
 BOUNDARY = b"frame"
+# After this many consecutive "device gone" capture failures, exit 3 so Electron can show disconnect UX.
+MAX_DEVICE_GONE_FAILURES = 5
 
 
 class SidecarExit(SystemExit):
@@ -188,6 +191,7 @@ async def _capture_loop(udid: Optional[str], frames: FrameBuffer) -> None:
     from pymobiledevice3.services.screenshot import ScreenshotService
 
     interval = 1.0 / TARGET_FPS
+    consecutive_gone = 0
     async with await create_using_usbmux(serial=udid) as lockdown:
         async with ScreenshotService(lockdown) as screenshotr:
             while not frames.stop_event.is_set():
@@ -195,7 +199,14 @@ async def _capture_loop(udid: Optional[str], frames: FrameBuffer) -> None:
                 try:
                     raw = await screenshotr.take_screenshot()
                     frames.set_jpeg(_png_to_jpeg(raw))
+                    consecutive_gone = 0
                 except Exception as exc:
+                    if _map_connect_error(exc) == EXIT_NO_DEVICE:
+                        consecutive_gone += 1
+                        if consecutive_gone >= MAX_DEVICE_GONE_FAILURES:
+                            raise SidecarExit(EXIT_NO_DEVICE) from exc
+                    else:
+                        consecutive_gone = 0
                     frames.set_jpeg(_placeholder_jpeg(f"capture error: {exc}"))
                     await asyncio.sleep(1.0)
                     continue
@@ -207,7 +218,12 @@ def _start_capture_thread(udid: Optional[str], frames: FrameBuffer) -> threading
     def runner() -> None:
         try:
             asyncio.run(_capture_loop(udid, frames))
+        except SidecarExit as exc:
+            code = int(exc.code) if exc.code is not None else 1
+            os._exit(code)
         except Exception as exc:
+            if _map_connect_error(exc) == EXIT_NO_DEVICE:
+                os._exit(EXIT_NO_DEVICE)
             frames.set_jpeg(_placeholder_jpeg(f"capture stopped: {exc}"))
             traceback.print_exc(file=sys.stderr)
 

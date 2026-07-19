@@ -6,10 +6,8 @@ import { createAirplayBackend } from './session/backends/airplay-backend'
 import { createMockBackend } from './session/backends/mock-backend'
 import { createUsbBackend } from './session/backends/usb-backend'
 import { createUsbVideoView } from './video/usb-video-view'
+import type { CastBackend } from './session/backends/types'
 import type { Channel, SessionSnapshot } from './session/types'
-
-/** Mock when explicitly `1`; otherwise real USB + AirPlay backends. */
-const useMock = process.env.MYCAST_USE_MOCK === '1'
 
 function resolvePreloadPath(): string {
   const base = path.join(__dirname, '../preload/preload')
@@ -17,52 +15,46 @@ function resolvePreloadPath(): string {
   return `${base}.js`
 }
 
-function resolvePythonPath(): string {
-  return process.env.MYCAST_PYTHON ?? 'python'
-}
-
-function resolveUsbScriptPath(): string {
-  return (
-    process.env.MYCAST_USB_SCRIPT ?? path.join(process.cwd(), 'sidecar', 'usb_mirror.py')
-  )
-}
-
-function resolveUxplayPath(): string {
-  return (
-    process.env.MYCAST_UXPLAY ?? path.join(process.cwd(), 'vendor', 'uxplay', 'uxplay.exe')
-  )
+/** Default: real backends. Set `MYCAST_USE_MOCK=1` for UI-only. */
+function createBackends(hooks: {
+  onCrash: () => void
+  onDisconnect: () => void
+}): { usb: CastBackend; airplay: CastBackend } {
+  if (process.env.MYCAST_USE_MOCK === '1') {
+    return {
+      usb: createMockBackend('usb'),
+      airplay: createMockBackend('airplay'),
+    }
+  }
+  return {
+    usb: createUsbBackend({
+      pythonPath: process.env.MYCAST_PYTHON ?? 'python',
+      scriptPath:
+        process.env.MYCAST_USB_SCRIPT ??
+        path.join(app.getAppPath(), 'sidecar', 'usb_mirror.py'),
+      onCrash: hooks.onCrash,
+      onDisconnect: hooks.onDisconnect,
+    }),
+    airplay: createAirplayBackend({
+      uxplayPath:
+        process.env.MYCAST_UXPLAY ??
+        path.join(app.getAppPath(), 'vendor', 'uxplay', 'uxplay.exe'),
+      onCrash: hooks.onCrash,
+    }),
+  }
 }
 
 function createSessionManager(): SessionManager {
   let sm!: SessionManager
-  const hooks = {
+  const backends = createBackends({
     onCrash: () => {
       void sm.notifyBackendCrashed()
     },
     onDisconnect: () => {
       void sm.notifyDisconnected()
     },
-  }
-
-  const usb = useMock
-    ? createMockBackend('usb')
-    : createUsbBackend({
-        pythonPath: resolvePythonPath(),
-        scriptPath: resolveUsbScriptPath(),
-        ...hooks,
-      })
-
-  const airplay = useMock
-    ? createMockBackend('airplay')
-    : createAirplayBackend({
-        uxplayPath: resolveUxplayPath(),
-        onCrash: hooks.onCrash,
-      })
-
-  sm = new SessionManager({
-    usb,
-    airplay,
   })
+  sm = new SessionManager(backends)
   return sm
 }
 
