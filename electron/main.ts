@@ -3,20 +3,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { SessionManager } from './session/session-manager'
 import { createMockBackend } from './session/backends/mock-backend'
-import type { Channel } from './session/types'
+import { createUsbBackend } from './session/backends/usb-backend'
+import { createUsbVideoView } from './video/usb-video-view'
+import type { Channel, SessionSnapshot } from './session/types'
 
-const useMock = process.env.MYCAST_USE_MOCK !== '0'
-
-function createSessionManager() {
-  // Real backends replaced in Tasks 6–8; mock keeps UI unblocked.
-  return new SessionManager({
-    usb: createMockBackend('usb'),
-    airplay: createMockBackend('airplay'),
-  })
-}
-
-let sm = createSessionManager()
-let mainWindow: BrowserWindow | null = null
+/** Mock when explicitly `1`; otherwise real USB (AirPlay stays mock until Task 7). */
+const useMock = process.env.MYCAST_USE_MOCK === '1'
 
 function resolvePreloadPath(): string {
   const base = path.join(__dirname, '../preload/preload')
@@ -24,8 +16,61 @@ function resolvePreloadPath(): string {
   return `${base}.js`
 }
 
+function resolvePythonPath(): string {
+  return process.env.MYCAST_PYTHON ?? 'python'
+}
+
+function resolveUsbScriptPath(): string {
+  return (
+    process.env.MYCAST_USB_SCRIPT ?? path.join(process.cwd(), 'sidecar', 'usb_mirror.py')
+  )
+}
+
+function createSessionManager(): SessionManager {
+  let sm!: SessionManager
+  const hooks = {
+    onCrash: () => {
+      void sm.notifyBackendCrashed()
+    },
+    onDisconnect: () => {
+      void sm.notifyDisconnected()
+    },
+  }
+
+  const usb = useMock
+    ? createMockBackend('usb')
+    : createUsbBackend({
+        pythonPath: resolvePythonPath(),
+        scriptPath: resolveUsbScriptPath(),
+        ...hooks,
+      })
+
+  sm = new SessionManager({
+    usb,
+    airplay: createMockBackend('airplay'),
+  })
+  return sm
+}
+
+let sm = createSessionManager()
+let mainWindow: BrowserWindow | null = null
+const usbVideo = createUsbVideoView()
+
 function broadcast() {
   mainWindow?.webContents.send('session:changed', sm.getSnapshot())
+}
+
+function syncUsbVideo(snapshot: SessionSnapshot) {
+  if (!mainWindow) return
+  if (
+    snapshot.phase === 'streaming' &&
+    snapshot.channel === 'usb' &&
+    snapshot.viewerUrl
+  ) {
+    usbVideo.show(mainWindow, snapshot.viewerUrl)
+  } else {
+    usbVideo.hide()
+  }
 }
 
 app.whenReady().then(() => {
@@ -38,7 +83,11 @@ app.whenReady().then(() => {
       nodeIntegration: false,
     },
   })
-  sm.onChange(() => broadcast())
+
+  sm.onChange((snapshot) => {
+    broadcast()
+    syncUsbVideo(snapshot)
+  })
 
   ipcMain.handle('session:get', () => sm.getSnapshot())
   ipcMain.handle('session:listUsb', () => sm.listUsbDevices())
@@ -51,9 +100,19 @@ app.whenReady().then(() => {
     return sm.getSnapshot()
   })
 
+  mainWindow.on('closed', () => {
+    usbVideo.destroy()
+    mainWindow = null
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
+})
+
+app.on('before-quit', () => {
+  usbVideo.destroy()
+  void sm.stop()
 })

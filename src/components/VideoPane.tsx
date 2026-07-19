@@ -8,6 +8,15 @@ interface VideoPaneProps {
 }
 
 export function VideoPane({ viewerUrl, channel, phase, airplayName }: VideoPaneProps) {
+  // USB stream is rendered by main-process BrowserView over the workspace.
+  if (phase === 'streaming' && channel === 'usb' && viewerUrl) {
+    return (
+      <div className="video-pane video-pane-empty">
+        <p>USB 投屏画面显示中</p>
+      </div>
+    )
+  }
+
   if (viewerUrl) {
     return (
       <div className="video-pane">
