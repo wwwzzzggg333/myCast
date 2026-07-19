@@ -12,6 +12,11 @@ describe('toUserMessage', () => {
     expect(toUserMessage(err)).toMatch(/iTunes|Apple/)
   })
 
+  it('maps AIRPLAY_BINARY_MISSING to install hint', () => {
+    const err = new CastError('AIRPLAY_BINARY_MISSING', 'vendor/uxplay/uxplay.exe')
+    expect(toUserMessage(err)).toMatch(/UxPlay|vendor\/README/)
+  })
+
   it('maps AIRPLAY_PORT_IN_USE to conflict hint', () => {
     const err = new CastError('AIRPLAY_PORT_IN_USE', 'EADDRINUSE')
     expect(toUserMessage(err)).toMatch(/端口|占用|名称/)

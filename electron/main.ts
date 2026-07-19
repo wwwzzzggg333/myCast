@@ -2,12 +2,13 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { SessionManager } from './session/session-manager'
+import { createAirplayBackend } from './session/backends/airplay-backend'
 import { createMockBackend } from './session/backends/mock-backend'
 import { createUsbBackend } from './session/backends/usb-backend'
 import { createUsbVideoView } from './video/usb-video-view'
 import type { Channel, SessionSnapshot } from './session/types'
 
-/** Mock when explicitly `1`; otherwise real USB (AirPlay stays mock until Task 7). */
+/** Mock when explicitly `1`; otherwise real USB + AirPlay backends. */
 const useMock = process.env.MYCAST_USE_MOCK === '1'
 
 function resolvePreloadPath(): string {
@@ -23,6 +24,12 @@ function resolvePythonPath(): string {
 function resolveUsbScriptPath(): string {
   return (
     process.env.MYCAST_USB_SCRIPT ?? path.join(process.cwd(), 'sidecar', 'usb_mirror.py')
+  )
+}
+
+function resolveUxplayPath(): string {
+  return (
+    process.env.MYCAST_UXPLAY ?? path.join(process.cwd(), 'vendor', 'uxplay', 'uxplay.exe')
   )
 }
 
@@ -45,9 +52,16 @@ function createSessionManager(): SessionManager {
         ...hooks,
       })
 
+  const airplay = useMock
+    ? createMockBackend('airplay')
+    : createAirplayBackend({
+        uxplayPath: resolveUxplayPath(),
+        onCrash: hooks.onCrash,
+      })
+
   sm = new SessionManager({
     usb,
-    airplay: createMockBackend('airplay'),
+    airplay,
   })
   return sm
 }

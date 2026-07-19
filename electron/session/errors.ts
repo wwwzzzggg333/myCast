@@ -1,6 +1,7 @@
 export type CastErrorCode =
   | 'DEVICE_NOT_TRUSTED'
   | 'DRIVER_MISSING'
+  | 'AIRPLAY_BINARY_MISSING'
   | 'AIRPLAY_PORT_IN_USE'
   | 'FIREWALL_BLOCKED'
   | 'BACKEND_CRASHED'
@@ -21,6 +22,8 @@ const MESSAGES: Record<CastErrorCode, string> = {
   DEVICE_NOT_TRUSTED: '请在 iPhone 上点「信任此电脑」，然后重试。',
   DRIVER_MISSING:
     '未检测到 Apple 设备支持组件。请安装 Microsoft Store 版 iTunes（或 Apple Mobile Device Support）后重试。',
+  AIRPLAY_BINARY_MISSING:
+    '未找到 UxPlay。请按 vendor/README.md 安装并设置 MYCAST_UXPLAY。',
   AIRPLAY_PORT_IN_USE: 'AirPlay 端口或名称冲突。请关闭占用程序，或在设置里更换接收名称后重试。',
   FIREWALL_BLOCKED: '可能被防火墙拦截。请允许 myCast 通过专用/公用网络，并放行相关组播发现。',
   BACKEND_CRASHED: '投屏异常退出。请点击重试；若反复失败，请重新插拔 USB 或重启 App。',
