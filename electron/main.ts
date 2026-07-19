@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
+import fs from 'node:fs'
 import path from 'node:path'
 import { SessionManager } from './session/session-manager'
 import { createMockBackend } from './session/backends/mock-backend'
@@ -17,6 +18,12 @@ function createSessionManager() {
 let sm = createSessionManager()
 let mainWindow: BrowserWindow | null = null
 
+function resolvePreloadPath(): string {
+  const base = path.join(__dirname, '../preload/preload')
+  if (fs.existsSync(`${base}.mjs`)) return `${base}.mjs`
+  return `${base}.js`
+}
+
 function broadcast() {
   mainWindow?.webContents.send('session:changed', sm.getSnapshot())
 }
@@ -26,7 +33,7 @@ app.whenReady().then(() => {
     width: 1100,
     height: 720,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/preload.js'),
+      preload: resolvePreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
     },
