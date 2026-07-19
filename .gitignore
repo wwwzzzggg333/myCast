@@ -1,0 +1,7 @@
+﻿.worktrees/
+node_modules/
+out/
+dist/
+sidecar/.venv/
+*.log
+.DS_Store
