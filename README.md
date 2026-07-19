@@ -6,7 +6,7 @@ Windows 桌面 App：通过 USB 或 AirPlay 将 iPhone 屏幕镜像到电脑。
 
 - **Windows 10/11**
 - **Apple 设备支持**：Microsoft Store 版 iTunes，或 Apple Mobile Device Support 驱动
-- **Python 3**（后续 USB 后端 sidecar 使用）
+- **Python 3.11+**（USB sidecar 使用 `pymobiledevice3`）
 
 ## 开发
 
@@ -15,3 +15,18 @@ npm install
 npm test
 npm run dev
 ```
+
+## USB sidecar（Python）
+
+设备列表与本地 MJPEG 预览由 `sidecar/usb_mirror.py` 提供。
+
+```powershell
+cd sidecar
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+.\.venv\Scripts\python usb_mirror.py list
+.\.venv\Scripts\python usb_mirror.py serve --port 17890
+```
+
+浏览器打开 `http://127.0.0.1:17890/`（手机需已「信任此电脑」）。  
+v1 使用截图循环（约 5–15 FPS）经 `/stream.mjpg` 推送；退出码：`2` 未信任/需配对，`3` 无设备，`4` 驱动/usbmux 失败。
