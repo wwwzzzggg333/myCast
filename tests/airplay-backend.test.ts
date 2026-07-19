@@ -66,6 +66,7 @@ describe('AirplayBackend', () => {
 
   it('start rejects on port-in-use stderr', async () => {
     let spawned: (ChildProcess & EventEmitter) | null = null
+    const killTree = vi.fn(async () => {})
     const spawn: SpawnFn = () => {
       spawned = fakeChild()
       queueMicrotask(() => {
@@ -78,7 +79,7 @@ describe('AirplayBackend', () => {
       uxplayPath: 'uxplay.exe',
       onCrash: () => {},
       spawn,
-      killTree: async () => {},
+      killTree,
       startupSettleMs: 1000,
       binaryExists: () => true,
     })
@@ -86,14 +87,53 @@ describe('AirplayBackend', () => {
     await expect(backend.start({ airplayName: 'myCast' })).rejects.toMatchObject({
       code: 'AIRPLAY_PORT_IN_USE',
     })
+
+    expect(killTree).toHaveBeenCalledWith(5151)
+    expect(spawned!.kill).toHaveBeenCalled()
+  })
+
+  it('clears child after start failure so a retry can spawn again', async () => {
+    let spawnCount = 0
+    const killTree = vi.fn(async () => {})
+    const spawn: SpawnFn = () => {
+      spawnCount += 1
+      const child = fakeChild()
+      if (spawnCount === 1) {
+        queueMicrotask(() => {
+          child.stderr!.emit('data', Buffer.from('bind: Address already in use\n'))
+        })
+      }
+      return child
+    }
+
+    const backend = createAirplayBackend({
+      uxplayPath: 'uxplay.exe',
+      onCrash: () => {},
+      spawn,
+      killTree,
+      startupSettleMs: 50,
+      binaryExists: () => true,
+    })
+
+    await expect(backend.start({ airplayName: 'myCast' })).rejects.toMatchObject({
+      code: 'AIRPLAY_PORT_IN_USE',
+    })
+    expect(killTree).toHaveBeenCalledTimes(1)
+
+    const retryPromise = backend.start({ airplayName: 'myCast' })
+    await vi.advanceTimersByTimeAsync(50)
+    await expect(retryPromise).resolves.toEqual({ viewerUrl: null })
+    expect(spawnCount).toBe(2)
   })
 
   it('spawns uxplay with name and no-hud flags', async () => {
     let cmd = ''
     let args: readonly string[] = []
-    const spawn: SpawnFn = (command, spawnArgs) => {
+    let stdio: unknown
+    const spawn: SpawnFn = (command, spawnArgs, options) => {
       cmd = command
       args = spawnArgs
+      stdio = options?.stdio
       return fakeChild()
     }
 
@@ -112,6 +152,7 @@ describe('AirplayBackend', () => {
 
     expect(cmd).toBe('C:\\uxplay\\uxplay.exe')
     expect(args).toEqual(['-n', 'myCast', '-nh'])
+    expect(stdio).toEqual(['ignore', 'ignore', 'pipe'])
   })
 
   it('unexpected exit after start calls onCrash', async () => {
