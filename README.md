@@ -7,8 +7,44 @@
 - **USB**：Python sidecar（`pymobiledevice3`）+ DVT userspace 截屏 → 应用内预览
 - **AirPlay**：本机启动 [UxPlay](https://github.com/FDH2/UxPlay) 接收端，手机控制中心镜像
 
-> 设计说明：[`docs/superpowers/specs/2026-07-20-iphone-screen-cast-design.md`](docs/superpowers/specs/2026-07-20-iphone-screen-cast-design.md)  
+> **实现原理与前置条件（推荐阅读）：** [`docs/architecture.md`](docs/architecture.md)  
+> 设计规格：[`docs/superpowers/specs/2026-07-20-iphone-screen-cast-design.md`](docs/superpowers/specs/2026-07-20-iphone-screen-cast-design.md)  
 > 实现计划：[`docs/superpowers/plans/2026-07-20-iphone-screen-cast.md`](docs/superpowers/plans/2026-07-20-iphone-screen-cast.md)
+
+## 实现原理（摘要）
+
+myCast 是 **Electron 壳 + 两个可替换后端**，不自研投屏协议：
+
+| 通道 | 原理 | 画面显示位置 |
+|------|------|----------------|
+| USB | usbmux → lockdown → **DVT Instruments 截屏**（userspace 隧道）→ 本机 MJPEG HTTP | Electron 内 BrowserView |
+| AirPlay | 启动 **UxPlay** 做 AirPlay 接收；手机控制中心主动镜像 | UxPlay 独立窗口 |
+
+会话由 `SessionManager` 统一管理（同时只允许一路投屏）。详情与数据流图见 [`docs/architecture.md`](docs/architecture.md)。
+
+## 前置条件总览
+
+### 共用
+
+- Windows 10/11、Node.js 20+、Python 3.11+（USB）
+- iPhone 已解锁；USB 时需点过「信任此电脑」
+
+### USB 专用（iOS 17+ / 新系统几乎都要）
+
+| 条件 | 为什么需要 |
+|------|------------|
+| Microsoft Store **iTunes** 启动过 | 拉起 `AppleMobileDeviceProcess`（usbmux，`127.0.0.1:27015`） |
+| **开发者模式** 已开启 | 否则 DVT/截屏服务常报 `InvalidService` |
+| 建议 `mounter auto-mount` | 挂载当前系统对应的开发者镜像 |
+| `sidecar\.venv` 已 `pip install -r requirements.txt` | App 默认用该解释器跑 sidecar |
+
+### AirPlay 专用
+
+| 条件 | 为什么需要 |
+|------|------------|
+| 与手机同一局域网 | AirPlay 发现依赖局域网组播 |
+| `vendor/uxplay/uxplay.exe` + GStreamer | 开源接收端，见 [`vendor/README.md`](vendor/README.md) |
+| 防火墙放行 | 否则控制中心搜不到 `myCast` |
 
 ## 环境要求
 

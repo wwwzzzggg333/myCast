@@ -49,19 +49,19 @@
                │ 统一 Session 接口
        ┌───────┴───────┐
        ▼               ▼
-  USB Backend     AirPlay Backend
-  (QuickTime 流)  (AirPlay 接收)
-       │               │
-       └───────┬───────┘
-               ▼
-        视频帧 → 播放器表面显示
+  USB Backend           AirPlay Backend
+  (DVT 截屏 → MJPEG)    (UxPlay 接收)
+       │                       │
+       └───────────┬───────────┘
+                   ▼
+     USB：Electron BrowserView / AirPlay：UxPlay 窗口
 ```
 
 - **UI 层**：设备列表、连接状态、错误提示、全屏与保持比例显示
 - **Session 层**：统一 `start / stop / status`，屏蔽 USB / Wi‑Fi 差异
-- **USB 后端**：检测已信任设备 → 拉起屏幕流 → 交给播放器
-- **AirPlay 后端**：本机启动接收服务 → 用户从 iPhone 控制中心镜像
-- **技术倾向**：桌面壳用 Tauri 或 Electron（实现计划中最终选定）；协议层包装已验证开源能力，不自写 AirPlay / QuickTime 协议
+- **USB 后端**：usbmux + pymobiledevice3 DVT userspace 截屏 → 本机 MJPEG → BrowserView（实现细节见 [`docs/architecture.md`](../../architecture.md)）
+- **AirPlay 后端**：本机启动 UxPlay → 用户从 iPhone 控制中心镜像
+- **技术选型（已落地）**：Electron + React；协议层包装 pymobiledevice3 / UxPlay，不自研 AirPlay / 投屏协议
 
 ## 4. 组件
 
